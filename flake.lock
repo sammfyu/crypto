@@ -1,0 +1,44 @@
+{
+  "nodes": {
+    "mixtonix": {
+      "locked": {
+        "lastModified": 1597558428,
+        "narHash": "sha256-IT5F0b+fJrz/pJcEj1aD6E9UvuqCCw3/gNZ4P3ehK1E=",
+        "ref": "fix-on-20.03",
+        "rev": "208dcd273d7a391a428c4a869a813436f60d5af3",
+        "revCount": 69,
+        "type": "git",
+        "url": "https://github.com/serokell/mix-to-nix"
+      },
+      "original": {
+        "ref": "fix-on-20.03",
+        "type": "git",
+        "url": "https://github.com/serokell/mix-to-nix"
+      }
+    },
+    "nixpkgs": {
+      "locked": {
+        "lastModified": 1605744920,
+        "narHash": "sha256-FGg6wSlUv4A0Mue4snu2VRNZOoJVT2+vLkfJ2HGcFeQ=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "a322b32e9d74fb476944ff6cfb55833dc69cfaaa",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixos-unstable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "root": {
+      "inputs": {
+        "mixtonix": "mixtonix",
+        "nixpkgs": "nixpkgs"
+      }
+    }
+  },
+  "root": "root",
+  "version": 7
+}
