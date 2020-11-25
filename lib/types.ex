@@ -4,6 +4,7 @@ defmodule BBO do
             asks: nil
 end
 
+'''
 defmodule Order do
   defstruct account:         nil,
             market:          nil,
@@ -18,6 +19,7 @@ defmodule Order do
             state:           nil,
             code:            nil
 end
+'''
 
 defmodule Fill do
   defstruct account:         nil,
@@ -39,11 +41,3 @@ defmodule Model do
 
 end
 
-defmodule Value do
-  defstruct bid0: nil,
-            bid1: nil,
-            bid2: nil,
-            ask0: nil,
-            ask1: nil,
-            ask2: nil
-end
