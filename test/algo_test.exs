@@ -137,9 +137,9 @@ defmodule AlgoTest do
       FV: 101,
       instrument: "BTCP"
     })
-    assert_receive {:"$gen_cast", {:cancel, %{price: 97,  state: :pending_cancel, code: nil}}}
-    assert_receive {:"$gen_cast", {:cancel, %{price: 100, state: :pending_cancel, code: nil}}}
-    assert_receive {:"$gen_cast", {:cancel, %{price: 101, state: :pending_cancel, code: nil}}}
+    assert_receive {:"$gen_cast", {:cancel, %{price: 97,  state: :pending_cancel}}}
+    assert_receive {:"$gen_cast", {:cancel, %{price: 100, state: :pending_cancel}}}
+    assert_receive {:"$gen_cast", {:cancel, %{price: 101, state: :pending_cancel}}}
     assert_receive {:"$gen_cast", {:place, 
       %{qty: 10, price: 100, side: :bid, type: :limit, instrument: "BTCP", state: :pending_active} = order7}}
     assert_receive {:"$gen_cast", {:place, 

@@ -38,10 +38,57 @@ defmodule Algo do
 
   # Handle place and cancel order
   @impl true
-  def handle_cast(%Model{FV: fv, instrument: instrument}, state = %{target_instrument: target_instrument})
+  def handle_cast(%Model{FV: fv, instrument: instrument}, state = %{target_instrument: target_instrument, orders: orders})
     when instrument == target_instrument
   do
+
+    # Many things can be done in a way simpler ways,
+    # most of the time with help of Enum / List / Map libs.
+    # It's normal to overcomplicate things, but make sure
+    # to look though functions provided be these libs.
+    # One cool thing to do is to fire IEX and type:
+    # "h Enum.<TAB>" - you will get interactive documentation
+
+    # Here is simplification for cancelling of outlying orders.
+    # (Step 1 from your code)
+    # I will use the most used functional programming functions: map/reduce
+
+    # I have to convert valuations to map in order to do
+    # easy key lookups, which is pretty ugly. You should probably make it map
+    # in the first place.
+    valuations =
+      fv
+      |> get_values(state.bbo, state.inventory, state.qty_limit)
+      |> Enum.map(fn {price, v0, v1, v2} -> {price, {v0, v1, v2}} end)
+      |> Map.new
+
+    # This is very common pattern, make sure you understand what's
+    # going on, if not - ask me.
+    orders =
+      orders
+      |> Enum.map(fn {price, %{state: order_state} = order} ->
+        order = case {order_state, price in Map.keys(valuations)} do
+          {:active, false} ->
+            order = %{order | state: :pending_cancel}
+            GenServer.cast(state.gateway_pid, {:cancel, order})
+            order
+          _ ->
+            order
+        end
+        {price, order}
+      end)
+      |> Map.new
+
+    # I update state here to make your other code work,
+    # but normally code flow is
+    # 1) decompose flow, apply different modifications
+    # 2) compose it back at the END of the function
+    state = %{state | orders: orders}
+
+
+    # You old code goes from here
     values = get_values(fv, state.bbo, state.inventory, state.qty_limit)
+
     order_price = Map.keys(state.orders)
     order = %{
       price:           nil,
@@ -57,25 +104,6 @@ defmodule Algo do
       account:         nil,
       market:          nil
     }
-
-    # New implementation of cancellation algo with state update
-    # 1. Cancel order if order_price not in values.price
-    values_price = Enum.map(values, fn x -> elem(x, 0) end)
-    cancel       = Enum.filter(order_price, fn x -> x not in values_price end)
-
-    Enum.each(cancel, fn x ->
-      GenServer.cast(state.gateway_pid, {:cancel, %{
-        price: state.orders[x].price,
-        state: :pending_cancel,
-        code:  nil
-      }})
-    end)
-
-    order_list =
-      Enum.into(cancel, state.orders, fn x ->
-        {x, %{state.orders[x] | state: :pending_cancel, code: nil}}
-      end)
-    state      = Map.put(state, :orders, order_list)
 
     # 2. Cancel order according to Bid Ask valuation
     # Cancel Bid
