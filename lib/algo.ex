@@ -249,30 +249,17 @@ defmodule Algo do
 
   # Calculate expected values for each prices
   # Creates a list of tuples {price, value_bid, value_ask, side}
-  def get_values(fv, md, inv, qty_limit) do
-    bid_price =
-      md.bids
-        |>  Enum.unzip()
-        |>  elem(0)
-        |>  Enum.map(fn p -> {
-              p,
-              fv - p - inv / qty_limit,
-              -1 * (fv - p - inv / qty_limit),
-              :bid
-              }
-            end)
+  def get_values(fv, %{bids: bids, asks: asks}, inv, qty_limit) do
+    bid_valuation = Enum.map(bids, fn {p, _} ->
+      value = fv - p - inv / qty_limit
+      {p, value, -1 * value, :bid}
+    end)
 
-    ask_price =
-      md.asks
-        |>  Enum.unzip()
-        |>  elem(0)
-        |>  Enum.map(fn p -> {
-              p,
-              fv - p - inv / qty_limit,
-              -1 * (fv - p - inv / qty_limit),
-              :ask}
-            end)
+    ask_valuation = Enum.map(asks, fn {p, _} ->
+      value = fv - p - inv / qty_limit
+      {p, value, -1 * value, :ask}
+    end)
 
-    bid_price ++ ask_price
+    bid_valuation ++ ask_valuation
   end
 end

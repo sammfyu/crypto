@@ -1,9 +1,6 @@
 defmodule AlgoTest do
   use ExUnit.Case
 
-
-
-
   test "test valuation function" do
     # Test the function
     md = %BBO{
@@ -16,7 +13,6 @@ defmodule AlgoTest do
       {100, -0.5, 0.5, :ask}, {101, -1.5, 1.5, :ask}, {102, -2.5, 2.5, :ask}
     ]
   end
-
 
   test "basic flow Market Making" do
     this   = self()
@@ -38,7 +34,6 @@ defmodule AlgoTest do
       instrument: "BTCP"
     })
     refute_receive _
-
 
     # FV comes, place order
     GenServer.cast(pid, %Model{
@@ -194,19 +189,5 @@ defmodule AlgoTest do
     msg    = {:state_update, %{order: order9, state: :active, code: :ok}}
     GenServer.cast(pid, msg)
     refute_receive _
-
-
   end
 end
- 
-
-
-
-
-
-    
-
-
-
-
-
