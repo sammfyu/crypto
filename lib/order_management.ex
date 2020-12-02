@@ -1,15 +1,15 @@
 defmodule Order_Management do
   def cancel(valuations, orders, margin, gateway_pid) do
     IO.puts("Cancelling Order")
-    orders = 
+    orders =
       orders
       # Cancel orders if the price is in the valuation map or the price is at the wrong side of valuationn
-      |> Enum.map(fn {{price, side}, %Order{state: order_state} = order} -> 
+      |> Enum.map(fn {{price, side}, %Order{state: order_state} = order} ->
         order = case {
-          order_state, 
+          order_state,
           price in Map.keys(valuations),
           side == get_in(valuations, [price, :side])
-        } 
+        }
         do
           {:active, false, _} ->
             order = %{order | state: :pending_cancel}
@@ -25,12 +25,12 @@ defmodule Order_Management do
         {{price, side}, order}
       end)
       # Cancel Orders with valuation below state margin
-      |> Enum.map(fn {{price, side}, %Order{state: order_state} = order} -> 
+      |> Enum.map(fn {{price, side}, %Order{state: order_state} = order} ->
         order = case {
-          order_state, 
-          get_in(valuations, [price, :v_bid]) <= margin, 
+          order_state,
+          get_in(valuations, [price, :v_bid]) <= margin,
           get_in(valuations, [price, :v_ask]) <= margin
-        } 
+        }
         do
           {:active, true, true} ->
             order = %{order | state: :pending_cancel}
@@ -52,13 +52,13 @@ defmodule Order_Management do
     # 2. Place order if valuation is lower than state margin according to the side
     orders =
       valuations
-      |> Enum.reduce(%{}, fn {price, %{v_bid: v_bid, v_ask: v_ask, side: side}}, acc -> 
+      |> Enum.reduce(%{}, fn {price, %{v_bid: v_bid, v_ask: v_ask, side: side}}, acc ->
         case {
-          {price, side} in Map.keys(orders), 
-          v_bid > margin, 
-          v_ask > margin, 
+          {price, side} in Map.keys(orders),
+          v_bid > margin,
+          v_ask > margin,
           side
-        } 
+        }
         do
           {false, true, _, :bid} ->
             order = %Order{
@@ -84,11 +84,11 @@ defmodule Order_Management do
             Map.put(acc, {price, side}, order)
           {true, _, _, _} ->
             Map.put(acc, {price, side}, orders[{price, side}])
-          _ -> 
+          _ ->
             acc
         end
       end)
+
     orders
   end
-
 end
