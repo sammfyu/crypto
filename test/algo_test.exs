@@ -8,7 +8,7 @@ defmodule AlgoTest do
       asks: [{100, 10}, {101, 12}, {102, 5}],
       instrument: "BTCCQ"
     }
-    assert Fun.get_values(99.5, md, 0, 30) == %{
+    assert Valuations.get(99.5, md, 0, 30) == %{
       99 => %{v_bid: 0.5, v_ask: -0.5, side: :bid}, 
       98 => %{v_bid: 1.5, v_ask: -1.5, side: :bid}, 
       97 =>  %{v_bid: 2.5, v_ask: -2.5, side: :bid},
