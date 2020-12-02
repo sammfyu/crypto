@@ -1,23 +1,6 @@
 defmodule AlgoTest do
   use ExUnit.Case
 
-  test "test valuation function" do
-    # Test the function
-    md = %BBO{
-      bids: [{99,  10}, {98,  10}, {97, 10}],
-      asks: [{100, 10}, {101, 12}, {102, 5}],
-      instrument: "BTCCQ"
-    }
-    assert Valuations.get(99.5, md, 0, 30) == %{
-      99 => %{v_bid: 0.5, v_ask: -0.5, side: :bid}, 
-      98 => %{v_bid: 1.5, v_ask: -1.5, side: :bid}, 
-      97 =>  %{v_bid: 2.5, v_ask: -2.5, side: :bid},
-      100 => %{v_bid: -0.5,v_ask:  0.5, side: :ask}, 
-      101 => %{v_bid: -1.5,v_ask:  1.5, side: :ask}, 
-      102 => %{v_bid: -2.5,v_ask:  2.5, side: :ask}
-    }
-  end
-
   test "basic flow Market Making" do
     this   = self()
     {:ok, pid} = GenServer.start_link(Algo, {this,
