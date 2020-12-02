@@ -1,8 +1,66 @@
 defmodule AlgoTest do
   use ExUnit.Case
 
+  test "should handle various number of price levels in book" do
+    this = self()
+    {:ok, pid} = GenServer.start_link(Algo, {this,
+      %{instrument: "BTCP", qty_limit: 30, book_printing_qty: 10, book_depth: 3, margin: 0.1}})
+
+    GenServer.cast(pid, %BBO{
+      bids: [],
+      asks: [{100, 10}, {101, 12}, {102, 5}, {103, 12}],
+      instrument: "BTCP"
+    })
+    refute_receive _
+
+    GenServer.cast(pid, %Model{
+      fv: 99.5,
+      instrument: "BTCP"
+    })
+
+    assert_receive {:"$gen_cast",
+      {:place, %Order{qty: 10, price: 100, side: :ask, type: :limit, instrument: "BTCP", state: :pending_active}}}
+    assert_receive {:"$gen_cast",
+      {:place, %Order{qty: 10, price: 101, side: :ask, type: :limit, instrument: "BTCP", state: :pending_active}}}
+    assert_receive {:"$gen_cast",
+      {:place, %Order{qty: 10, price: 102, side: :ask, type: :limit, instrument: "BTCP", state: :pending_active}}}
+    refute_receive _
+  end
+
+  test "should handle bbo vs model reordering" do
+    this = self()
+    {:ok, pid} = GenServer.start_link(Algo, {this,
+      %{instrument: "BTCP", qty_limit: 30, book_printing_qty: 10, book_depth: 3, margin: 0.1}})
+
+    GenServer.cast(pid, %Model{
+      fv: 99.5,
+      instrument: "BTCP"
+    })
+    refute_receive _
+
+    GenServer.cast(pid, %BBO{
+      bids: [{99,  10}, {98,  10}, {97, 10}],
+      asks: [{100, 10}, {101, 12}, {102, 5}],
+      instrument: "BTCP"
+    })
+
+    assert_receive {:"$gen_cast",
+      {:place, %Order{qty: 10, price: 99,  side: :bid, type: :limit, instrument: "BTCP", state: :pending_active}}}
+    assert_receive {:"$gen_cast",
+      {:place, %Order{qty: 10, price: 98,  side: :bid, type: :limit, instrument: "BTCP", state: :pending_active}}}
+    assert_receive {:"$gen_cast",
+      {:place, %Order{qty: 10, price: 97,  side: :bid, type: :limit, instrument: "BTCP", state: :pending_active}}}
+    assert_receive {:"$gen_cast",
+      {:place, %Order{qty: 10, price: 100, side: :ask, type: :limit, instrument: "BTCP", state: :pending_active}}}
+    assert_receive {:"$gen_cast",
+      {:place, %Order{qty: 10, price: 101, side: :ask, type: :limit, instrument: "BTCP", state: :pending_active}}}
+    assert_receive {:"$gen_cast",
+      {:place, %Order{qty: 10, price: 102, side: :ask, type: :limit, instrument: "BTCP", state: :pending_active}}}
+    refute_receive _
+  end
+
   test "basic flow Market Making" do
-    this   = self()
+    this = self()
     {:ok, pid} = GenServer.start_link(Algo, {this,
       %{instrument: "BTCP", qty_limit: 30, book_printing_qty: 10, book_depth: 3, margin: 0.1}})
 
@@ -39,6 +97,7 @@ defmodule AlgoTest do
       {:place, %Order{qty: 10, price: 101, side: :ask, type: :limit, instrument: "BTCP", state: :pending_active} = order5}}
     assert_receive {:"$gen_cast", 
       {:place, %Order{qty: 10, price: 102, side: :ask, type: :limit, instrument: "BTCP", state: :pending_active} = order6}}
+    refute_receive _
      
  
     # Gets Feedback
