@@ -38,15 +38,25 @@ defmodule Algo do
 
   # Handle place and cancel order
   @impl true
-  def handle_cast(%Model{fv: fv, instrument: instrument}, state = %{target_instrument: target_instrument, orders: orders})
+  def handle_cast(%Model{fv: fv, instrument: instrument}, state = %{target_instrument: target_instrument})
     when instrument == target_instrument
   do
     IO.puts("FV : #{fv}")
     state = %{state | fv: fv}
-    valuations = Fun.get_values(fv, state.bbo, state.inventory, state.qty_limit)
-    state = Fun.cancel(orders, valuations, state)
-    state = Fun.place(orders, valuations, state)
+    valuations = Valuations.get(fv, state.bbo, state.inventory, state.qty_limit)
+    orders = Order_Management.cancel(valuations, state.orders, state.margin, state.gateway_pid)
+    state = %{state | orders: orders}
     
+    orders = Order_Management.place(
+      valuations,
+      state.orders, 
+      state.margin, 
+      state.gateway_pid, 
+      state.book_printing_qty, 
+      state.target_instrument
+    )
+    state = %{state | orders: orders}
+
     {:noreply, state}
   end
 
@@ -64,9 +74,19 @@ defmodule Algo do
     orders = Map.put(state.orders, {new_order.price, new_order.side}, new_order)
     state = %{state | orders: orders}
 
-    valuations = Fun.get_values(state.fv, state.bbo, state.inventory, state.qty_limit)
-    state = Fun.cancel(orders, valuations, state)
-    state = Fun.place(orders, valuations, state)
+    valuations = Valuations.get(state.fv, state.bbo, state.inventory, state.qty_limit)
+    orders = Order_Management.cancel(valuations, state.orders, state.margin, state.gateway_pid)
+    state = %{state | orders: orders}
+    
+    orders = Order_Management.place(
+      valuations,
+      state.orders, 
+      state.margin, 
+      state.gateway_pid, 
+      state.book_printing_qty, 
+      state.target_instrument
+    )
+    state = %{state | orders: orders}
 
     {:noreply, state}
   end
@@ -78,9 +98,19 @@ defmodule Algo do
     orders = Map.delete(state.orders, {feedback.order.price, feedback.order.side})
     state = %{state | orders: orders}
 
-    valuations = Fun.get_values(state.fv, state.bbo, state.inventory, state.qty_limit)
-    state = Fun.cancel(state.orders, valuations, state)
-    state = Fun.place(state.orders, valuations, state)
+    valuations = Valuations.get(state.fv, state.bbo, state.inventory, state.qty_limit)
+    orders = Order_Management.cancel(valuations, state.orders, state.margin, state.gateway_pid)
+    state = %{state | orders: orders}
+    
+    orders = Order_Management.place(
+      valuations,
+      state.orders, 
+      state.margin, 
+      state.gateway_pid, 
+      state.book_printing_qty, 
+      state.target_instrument
+    )
+    state = %{state | orders: orders}
     
     {:noreply, state}
   end
@@ -95,9 +125,9 @@ defmodule Algo do
     end
     state = Map.put(state, :inventory, inventory)
 
-    orders = case active_qty == 0 do
-      :true -> Map.delete(state.orders, {order.price, order.side})
-      :false-> Map.put(state.orders, {order.price, order.side}, order)  
+    orders = case active_qty do
+      0 -> Map.delete(state.orders, {order.price, order.side})
+      _ -> Map.put(state.orders, {order.price, order.side}, order)  
     end
     state = Map.put(state, :orders, orders)
 
