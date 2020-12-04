@@ -31,9 +31,26 @@ defmodule Algo do
   def handle_cast(bbo = %BBO{instrument: instrument}, state = %Algo{target_instrument: target_instrument})
     when instrument == target_instrument
   do
-    new_state = Map.put(state, :bbo, bbo)
+    state = case state.fv do
+      nil ->
+        %{state | bbo: bbo}
+      _ ->
+        valuations = Valuations.get(state.fv, bbo, state.inventory, state.qty_limit)
+        orders = OrderManagement.cancel(valuations, state.orders, state.margin, state.gateway_pid)
+        state = %{state | orders: orders}
 
-    {:noreply, new_state}
+        orders = OrderManagement.place(
+          valuations,
+          state.orders,
+          state.margin,
+          state.gateway_pid,
+          state.book_depth,
+          state.book_printing_qty,
+          state.target_instrument
+        )
+        %{state | orders: orders, bbo: bbo}
+    end
+    {:noreply, state}
   end
 
   # Handle place and cancel order
@@ -42,21 +59,25 @@ defmodule Algo do
     when instrument == target_instrument
   do
     IO.puts("FV : #{fv}")
-    state = %{state | fv: fv}
-    valuations = Valuations.get(fv, state.bbo, state.inventory, state.qty_limit)
-    orders = OrderManagement.cancel(valuations, state.orders, state.margin, state.gateway_pid)
-    state = %{state | orders: orders}
+    state = case state.bbo do
+      nil ->
+        %{state | fv: fv}
+      _ ->
+        valuations = Valuations.get(fv, state.bbo, state.inventory, state.qty_limit)
+        orders = OrderManagement.cancel(valuations, state.orders, state.margin, state.gateway_pid)
+        state = %{state | orders: orders}
 
-    orders = OrderManagement.place(
-      valuations,
-      state.orders,
-      state.margin,
-      state.gateway_pid,
-      state.book_printing_qty,
-      state.target_instrument
-    )
-    state = %{state | orders: orders}
-
+        orders = OrderManagement.place(
+          valuations,
+          state.orders,
+          state.margin,
+          state.gateway_pid,
+          state.book_depth,
+          state.book_printing_qty,
+          state.target_instrument
+        )
+        %{state | orders: orders, fv: fv}
+    end
     {:noreply, state}
   end
 
@@ -83,6 +104,7 @@ defmodule Algo do
       state.orders,
       state.margin,
       state.gateway_pid,
+      state.book_depth,
       state.book_printing_qty,
       state.target_instrument
     )
@@ -107,6 +129,7 @@ defmodule Algo do
       state.orders,
       state.margin,
       state.gateway_pid,
+      state.book_depth,
       state.book_printing_qty,
       state.target_instrument
     )
@@ -119,17 +142,30 @@ defmodule Algo do
   @impl true
   def handle_cast({:fill, %{fill: fill, order: %{active_qty: active_qty} = order}}, state) do
     IO.puts("Order Fully Filled")
-    inventory = case fill.side do
-      :bid  -> state.inventory + fill.qty
-      :ask  -> state.inventory - fill.qty
-    end
-    state = Map.put(state, :inventory, inventory)
-
     orders = case active_qty do
       0 -> Map.delete(state.orders, {order.price, order.side})
       _ -> Map.put(state.orders, {order.price, order.side}, order)
     end
     state = Map.put(state, :orders, orders)
+
+    inventory = case fill.side do
+      :bid  -> state.inventory + fill.qty
+      :ask  -> state.inventory - fill.qty
+    end
+    valuations = Valuations.get(state.fv, state.bbo, inventory, state.qty_limit)
+    orders = OrderManagement.cancel(valuations, state.orders, state.margin, state.gateway_pid)
+    state = %{state | orders: orders}
+
+    orders = OrderManagement.place(
+      valuations,
+      state.orders,
+      state.margin,
+      state.gateway_pid,
+      state.book_depth,
+      state.book_printing_qty,
+      state.target_instrument
+    )
+    state = %{state | orders: orders, inventory: inventory}
 
     {:noreply, state}
   end
@@ -139,9 +175,9 @@ defmodule Algo do
   def handle_cast({:state_update, feedback = %{state: :filled, code: :too_late_to_cancel}}, state) do
     IO.puts("Order Rejected")
     new_order = %{feedback.order | state: feedback.state, code: feedback.code}
-    order_map = Map.put(state.orders, {new_order.price, new_order.side}, new_order)
-    new_state = Map.put(state, :orders, order_map)
+    orders = Map.put(state.orders, {new_order.price, new_order.side}, new_order)
+    state = Map.put(state, :orders, orders)
 
-    {:noreply, new_state}
+    {:noreply, state}
   end
 end
