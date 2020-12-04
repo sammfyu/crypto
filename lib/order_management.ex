@@ -18,11 +18,15 @@ defmodule OrderManagement do
     |> Map.new
   end
 
-  def place(valuations, orders, margin, gateway_pid, book_printing_qty, target_instrument) do
+  def place(valuations, orders, margin, gateway_pid, book_depth, book_printing_qty, target_instrument) do
     valuations
     |> Enum.reduce(orders, fn {{price, side} = key, value}, orders ->
-      case Map.get(orders, key) do
-        nil when value > margin ->
+      case {
+        Map.get(orders, key),
+        Enum.count(orders, fn {{_,s}, %{state: state}} -> s == side and state != :pending_cancel end)
+      }
+      do
+        {nil, count} when value > margin and count < book_depth ->
           order = %Order{
             price:      price,
             qty:        book_printing_qty,
