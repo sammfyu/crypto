@@ -13,4 +13,17 @@ defmodule Valuations do
     bid_valuation ++ ask_valuation
     |> Map.new
   end
+
+  def depth(%{bids: bids, asks: asks}, book_depth) do
+    b = case bids do
+      [] -> -1
+      _ -> List.first(bids) |> elem(0) |> Kernel.-(book_depth)
+    end
+
+    a = case asks do
+      [] -> nil
+      _ -> List.first(asks) |> elem(0) |> Kernel.+(book_depth)
+    end
+    {b, a}
+  end
 end
