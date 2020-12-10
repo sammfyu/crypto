@@ -1,29 +1,60 @@
 defmodule Valuations do
-  def get(fv, %{bids: bids, asks: asks}, inv, qty_limit) do
-    bid_valuation = Enum.map(bids, fn {p, _} ->
-      value = fv - p - inv / qty_limit
-      {{p, :bid}, value}
-    end)
-
-    ask_valuation = Enum.map(asks, fn {p, _} ->
-      value = fv - p - inv / qty_limit
-      {{p, :ask}, -1 * value}
-    end)
-
-    bid_valuation ++ ask_valuation
-    |> Map.new
-  end
-
-  def depth(%{bids: bids, asks: asks}, book_depth) do
-    b = case bids do
-      [] -> -1
-      _ -> List.first(bids) |> elem(0) |> Kernel.-(book_depth)
+  # In here I took a step back to figure out all the logic to be done in this function.
+  # It handles empty orderbook, self-trading, valuation, book depth and hard-limit problems.
+  # --------------Description-------------
+  # 1. Compute best_bid and best_ask for self-trade condition use
+  # 2. Concatenate both bid and ask lists from the order book
+  # 3. Calculate values for bid and ask
+  # 4. Determine sides by comparing v_bid and v_ask
+  # 5. Use Enum.reduce to add favourable orders into new_list
+  # by checking margin and self-trade condition
+  # 6. Sort the list by values in ascending order so that it becomes
+  # easier to add orders in the next Enum.reduce
+  # 7. Use Enum.reduce to add favourable orders into new_list
+  # by checking book depth on each side and checking hard limit
+  # 8. Return map in form  %{{price, side}, qty}
+  def get(fv, %{bids: bids, asks: asks}, inv, lim, margin, depth) do
+    best_bid = case bids do
+      [] -> -1  # Avoid issue of number < nil -> true situation
+      [{price, _} | _] -> price
     end
-
-    a = case asks do
+    best_ask = case asks do
       [] -> nil
-      _ -> List.first(asks) |> elem(0) |> Kernel.+(book_depth)
+      [{price, _} | _] -> price
     end
-    {b, a}
+
+    bids ++ asks
+    |> Enum.reduce([], fn {price, qty} , acc ->
+      v_bid = (fv - price - inv / lim)
+      v_ask = v_bid * -1
+      side = case v_bid > v_ask do
+        true  -> :bid
+        false -> :ask
+      end
+      bid_selftrade = price >= best_ask and side == :bid
+      ask_selftrade = price <= best_bid and side == :ask
+      case max(v_bid, v_ask) do
+        value when value < margin or bid_selftrade or ask_selftrade ->
+          acc
+        value when value >= margin ->
+          [{price, side, qty, value} | acc]
+      end
+    end)
+    |> Enum.sort_by(fn {_, _, _, value} -> value end)
+    |> Enum.reduce([], fn {price, side, qty, _}, acc ->
+      case {
+        side,
+        Enum.count(acc, fn {{_,s}, _} -> s == side end)
+      }
+      do
+        {:bid, count} when count < depth and inv < lim ->
+          [{{price, side}, qty} | acc]
+        {:ask, count} when count < depth and inv > -lim ->
+          [{{price, side}, qty} | acc]
+        _ ->
+          acc
+      end
+    end)
+    |> Map.new
   end
 end
