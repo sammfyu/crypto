@@ -42,14 +42,10 @@ defmodule Valuations do
     end)
     |> Enum.sort_by(fn {_, _, _, value} -> value end)
     |> Enum.reduce([], fn {price, side, qty, _}, acc ->
-      case {
-        side,
-        Enum.count(acc, fn {{_,s}, _} -> s == side end)
-      }
-      do
-        {:bid, count} when count < depth and inv < lim ->
-          [{{price, side}, qty} | acc]
-        {:ask, count} when count < depth and inv > -lim ->
+      bid_in_limit = inv < lim  and side == :bid
+      ask_in_limit = inv > -lim and side == :ask
+      case Enum.count(acc, fn {{_,s}, _} -> s == side end) < depth do
+        true when bid_in_limit or ask_in_limit ->
           [{{price, side}, qty} | acc]
         _ ->
           acc
