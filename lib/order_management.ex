@@ -1,8 +1,7 @@
 defmodule OrderManagement do
   def cancel(valuations, orders, gateway_pid) do
     orders
-    |> Enum.map(fn
-      {{_, side} = key, %Order{state: :active} = order} ->
+    |> Enum.map(fn {key, %Order{state: :active} = order} ->
         order = case Map.get(valuations, key) do
           nil ->
             order = %{order | state: :pending_cancel}
