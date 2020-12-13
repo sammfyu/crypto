@@ -4,7 +4,7 @@ defmodule AlgoTest do
   test "should handle various number of price levels in book" do
     this = self()
     {:ok, pid} = GenServer.start_link(Algo, {this,
-      %{instrument: "BTCP", qty_limit: 30, book_printing_qty: 10, book_depth: 3, margin: 0.1}})
+      %{instrument: "BTCP", qty_limit: 30, book_printing_qty: 10, book_depth: 3, margin: 0.1, tick: 1}})
 
     GenServer.cast(pid, %BBO{
       bids: [],
@@ -30,7 +30,7 @@ defmodule AlgoTest do
   test "should handle bbo vs model reordering" do
     this = self()
     {:ok, pid} = GenServer.start_link(Algo, {this,
-      %{instrument: "BTCP", qty_limit: 30, book_printing_qty: 10, book_depth: 3, margin: 0.1}})
+      %{instrument: "BTCP", qty_limit: 30, book_printing_qty: 10, book_depth: 3, margin: 0.1, tick: 1}})
 
     GenServer.cast(pid, %Model{
       fv: 99.5,
@@ -71,7 +71,7 @@ defmodule AlgoTest do
   test "handles qty hard-limit" do
     this = self()
     {:ok, pid} = GenServer.start_link(Algo, {this,
-      %{instrument: "BTCP", qty_limit: 10, book_printing_qty: 10, book_depth: 3, margin: 0.1}})
+      %{instrument: "BTCP", qty_limit: 10, book_printing_qty: 10, book_depth: 3, margin: 0.1, tick: 1}})
 
     GenServer.cast(pid, %Model{
       fv: 99.5,
@@ -137,6 +137,9 @@ defmodule AlgoTest do
     GenServer.cast(pid, msg)
     assert_receive {:"$gen_cast", {:cancel, %Order{order_id: 5, price: 101, side: :ask}}}
     assert_receive {:"$gen_cast", {:cancel, %Order{order_id: 6, price: 102, side: :ask}}}
+    assert_receive {:"$gen_cast", {:cancel, %Order{order_id: 3, price: 97,  side: :bid}}}
+    assert_receive {:"$gen_cast",
+      {:place, %Order{qty: 10, price: 100, side: :bid, type: :limit, instrument: "BTCP", state: :pending_active}}}
     refute_receive _
 
   end
@@ -148,7 +151,7 @@ defmodule AlgoTest do
   test "handles avoiding self trading problem due to inventory" do
     this = self()
     {:ok, pid} = GenServer.start_link(Algo, {this,
-      %{instrument: "BTCP", qty_limit: 10, book_printing_qty: 10, book_depth: 1, margin: 0.1}})
+      %{instrument: "BTCP", qty_limit: 10, book_printing_qty: 10, book_depth: 1, margin: 0.1, tick: 1}})
 
     GenServer.cast(pid, %Model{
       fv: 99.5,
@@ -190,7 +193,7 @@ defmodule AlgoTest do
   test "handles avoiding self trading problem due to inventory with more depth" do
     this = self()
     {:ok, pid} = GenServer.start_link(Algo, {this,
-      %{instrument: "BTCP", qty_limit: 10, book_printing_qty: 10, book_depth: 2, margin: 0.1}})
+      %{instrument: "BTCP", qty_limit: 10, book_printing_qty: 10, book_depth: 2, margin: 0.1, tick: 1}})
 
     GenServer.cast(pid, %Model{
       fv: 99.5,
@@ -237,16 +240,90 @@ defmodule AlgoTest do
     msg   = {:fill, %{fill: fill, order: order3}}
     GenServer.cast(pid, msg)
     assert_receive {:"$gen_cast", {:cancel, %Order{order_id: 3, price: 100}}}
+    assert_receive {:"$gen_cast", {:cancel, %Order{order_id: 2, price: 98}}}
+    assert_receive {:"$gen_cast",
+      {:place, %Order{qty: 10, price: 100,  side: :bid, type: :limit, instrument: "BTCP", state: :pending_active}}}
     assert_receive {:"$gen_cast",
       {:place, %Order{qty: 10, price: 102,  side: :ask, type: :limit, instrument: "BTCP", state: :pending_active}}}
     refute_receive _
   end
 
+  test "Handle Self-Osillation Problem" do
+    this = self()
+    {:ok, pid} = GenServer.start_link(Algo, {this,
+      %{instrument: "BTCP", qty_limit: 10, book_printing_qty: 10, book_depth: 1, margin: 0.1, tick: 1}})
+
+    # Do not store MD for the wrong instrument
+    GenServer.cast(pid, %BBO{
+      bids: [{99,  10}, {98,  10}, {97, 10}],
+      asks: [{100, 10}, {101, 12}, {102, 5}],
+      instrument: "BTCP"
+    })
+    refute_receive _
+
+    GenServer.cast(pid, %Model{
+      fv: 99.5,
+      instrument: "BTCP"
+    })
+    assert_receive {:"$gen_cast",
+      {:place, %Order{qty: 10, price: 99,  side: :bid, type: :limit, instrument: "BTCP", state: :pending_active} = order1}}
+    assert_receive {:"$gen_cast",
+      {:place, %Order{qty: 10, price: 100, side: :ask, type: :limit, instrument: "BTCP", state: :pending_active} = order2}}
+    refute_receive _
+
+    order1 = %Order{order1 | order_id: 1, active_qty: 10}
+    msg    = {:state_update, %{order: order1, state: :active, code: :ok}}
+    GenServer.cast(pid, msg)
+    refute_receive _
+
+    order2 = %Order{order2 | order_id: 2, active_qty: 10}
+    msg    = {:state_update, %{order: order2, state: :active, code: :ok}}
+    GenServer.cast(pid, msg)
+    refute_receive _
+
+    fill   = %Fill{price: 100, qty: 8, side: :ask, fill_id: 1337, order_id: 2, client_order_id: order2.client_order_id}
+    order2 = %Order{order2 | active_qty: 2, state: :active}
+    msg    = {:fill, %{fill: fill, order: order2}}
+    GenServer.cast(pid, msg)
+    assert_receive {:"$gen_cast", {:cancel, %Order{order_id: 1, price: 99,  side: :bid}}}
+    assert_receive {:"$gen_cast", {:cancel, %Order{order_id: 2, price: 100, side: :ask}}}
+    assert_receive {:"$gen_cast",
+      {:place, %Order{qty: 10, price: 100,  side: :bid, type: :limit, instrument: "BTCP", state: :pending_active} = order3}}
+    assert_receive {:"$gen_cast",
+      {:place, %Order{qty: 10, price: 101, side: :ask, type: :limit, instrument: "BTCP", state: :pending_active} = order4}}
+    refute_receive _
+
+
+    msg = {:state_update, %{order: order1, state: :cancelled, code: :ok}}
+    GenServer.cast(pid, msg)
+    msg = {:state_update, %{order: order2, state: :cancelled, code: :ok}}
+    GenServer.cast(pid, msg)
+    refute_receive _
+
+    order3 = %Order{order3 | order_id: 3, active_qty: 10}
+    msg    = {:state_update, %{order: order3, state: :active, code: :ok}}
+    GenServer.cast(pid, msg)
+    order4 = %Order{order4 | order_id: 4, active_qty: 10}
+    msg    = {:state_update, %{order: order4, state: :active, code: :ok}}
+    GenServer.cast(pid, msg)
+    refute_receive _
+
+    fill   = %Fill{price: 100, qty: 8, side: :bid, fill_id: 1337, order_id: 3, client_order_id: order3.client_order_id}
+    order3 = %Order{order3 | active_qty: 2, state: :active}
+    msg    = {:fill, %{fill: fill, order: order3}}
+    GenServer.cast(pid, msg)
+    assert_receive {:"$gen_cast", {:cancel, %Order{order_id: 3, price: 100, side: :bid}}}
+    assert_receive {:"$gen_cast",
+      {:place, %Order{qty: 10, price: 99,  side: :bid, type: :limit, instrument: "BTCP", state: :pending_active}}}
+    refute_receive _
+  end
+
+
 
   test "basic flow Market Making" do
     this = self()
     {:ok, pid} = GenServer.start_link(Algo, {this,
-      %{instrument: "BTCP", qty_limit: 30, book_printing_qty: 10, book_depth: 3, margin: 0.1}})
+      %{instrument: "BTCP", qty_limit: 30, book_printing_qty: 10, book_depth: 3, margin: 0.1, tick: 1}})
 
     # Do not store MD for the wrong instrument
     GenServer.cast(pid, %BBO{
@@ -315,7 +392,6 @@ defmodule AlgoTest do
     GenServer.cast(pid, msg)
     refute_receive _
 
-
     # fv comes again, algo recalculate the valuation, do nothing
     GenServer.cast(pid, %Model{
       fv: 99.3,
@@ -338,12 +414,15 @@ defmodule AlgoTest do
       instrument: "BTCP"
     })
     assert_receive {:"$gen_cast", {:cancel, %Order{price: 99, state: :pending_cancel, code: nil}}}
-
+    refute_receive _
     # New fv comes. New cancel is still pending so do nothing.
     GenServer.cast(pid, %Model{
       fv: 99.0,
       instrument: "BTCP"
     })
+    assert_receive {:"$gen_cast", {:cancel, %Order{order_id: 6, price: 102, side: :ask}}}
+    assert_receive {:"$gen_cast", {:place,
+      %Order{qty: 10, price: 99, side: :ask, type: :limit, instrument: "BTCP", state: :pending_active}}}
     refute_receive _
 
 
@@ -353,6 +432,9 @@ defmodule AlgoTest do
     refute_receive _
 
 
+
+    # This test is based on old design, not used for now
+    '''
     # Market moves
     # Cancel bid@97 because price is out of orderbook
     # Cancel ask@100 because market moved up, cancel asap
@@ -421,5 +503,6 @@ defmodule AlgoTest do
     msg    = {:state_update, %{order: order9, state: :active, code: :ok}}
     GenServer.cast(pid, msg)
     refute_receive _
-  end
+    '''
+    end
 end
