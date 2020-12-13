@@ -11,7 +11,9 @@ defmodule Algo do
             inventory:           0,
             bbo:               nil,
             fv:                nil,
-            price_depth:       nil
+            price_depth:       nil,
+            tick:              nil,
+            d_inv:               0
 
   @impl true
   def init({gateway_pid, %{} = config}) do
@@ -21,6 +23,7 @@ defmodule Algo do
       book_printing_qty: config.book_printing_qty,
       book_depth:        config.book_depth,
       margin:            config.margin,
+      tick:              config.tick,
       gateway_pid:       gateway_pid
     }
 
@@ -36,7 +39,7 @@ defmodule Algo do
       nil ->
         %{state | bbo: bbo}
       _ ->
-        valuations = Valuations.get(state.fv, bbo, state.inventory, state.qty_limit, state.margin, state.book_depth)
+        valuations = Valuations.get(state.fv, bbo, state.inventory, state.d_inv, state.qty_limit, state.margin, state.book_depth, state.tick)
         orders = OrderManagement.cancel(valuations, state.orders,  state.gateway_pid)
         state = %{state | orders: orders}
 
@@ -62,7 +65,7 @@ defmodule Algo do
       nil ->
         %{state | fv: fv}
       _ ->
-        valuations = Valuations.get(fv, state.bbo, state.inventory, state.qty_limit, state.margin, state.book_depth)
+        valuations = Valuations.get(fv, state.bbo, state.inventory, state.d_inv, state.qty_limit, state.margin, state.book_depth, state.tick)
         orders = OrderManagement.cancel(valuations, state.orders,  state.gateway_pid)
         state = %{state | orders: orders}
 
@@ -92,7 +95,7 @@ defmodule Algo do
     orders = Map.put(state.orders, {new_order.price, new_order.side}, new_order)
     state = %{state | orders: orders}
 
-    valuations = Valuations.get(state.fv, state.bbo, state.inventory, state.qty_limit, state.margin, state.book_depth)
+    valuations = Valuations.get(state.fv, state.bbo, state.inventory, state.d_inv, state.qty_limit, state.margin, state.book_depth, state.tick)
     orders = OrderManagement.cancel(valuations, state.orders,  state.gateway_pid)
     state = %{state | orders: orders}
 
@@ -115,7 +118,7 @@ defmodule Algo do
     orders = Map.delete(state.orders, {feedback.order.price, feedback.order.side})
     state = %{state | orders: orders}
 
-    valuations = Valuations.get(state.fv, state.bbo, state.inventory, state.qty_limit, state.margin, state.book_depth)
+    valuations = Valuations.get(state.fv, state.bbo, state.inventory, state.d_inv, state.qty_limit, state.margin, state.book_depth, state.tick)
     orders = OrderManagement.cancel(valuations, state.orders,  state.gateway_pid)
     state = %{state | orders: orders}
 
@@ -144,9 +147,9 @@ defmodule Algo do
       :bid  -> state.inventory + fill.qty
       :ask  -> state.inventory - fill.qty
     end
-    state = %{state | orders: orders, inventory: inventory}
-
-    valuations = Valuations.get(state.fv, state.bbo, state.inventory, state.qty_limit, state.margin, state.book_depth)
+    d_inv = inventory - state.inventory
+    state = %{state | orders: orders, inventory: inventory, d_inv: d_inv}
+    valuations = Valuations.get(state.fv, state.bbo, state.inventory, state.d_inv, state.qty_limit, state.margin, state.book_depth, state.tick)
     orders = OrderManagement.cancel(valuations, state.orders,  state.gateway_pid)
     state = %{state | orders: orders}
 
