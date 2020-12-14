@@ -413,7 +413,7 @@ defmodule AlgoTest do
       fv: 99.1,
       instrument: "BTCP"
     })
-    assert_receive {:"$gen_cast", {:cancel, %Order{price: 99, state: :pending_cancel, code: nil}}}
+    assert_receive {:"$gen_cast", {:cancel, %Order{order_id: 1, price: 99, side: :bid}}}
     refute_receive _
     # New fv comes. New cancel is still pending so do nothing.
     GenServer.cast(pid, %Model{
@@ -422,19 +422,26 @@ defmodule AlgoTest do
     })
     assert_receive {:"$gen_cast", {:cancel, %Order{order_id: 6, price: 102, side: :ask}}}
     assert_receive {:"$gen_cast", {:place,
-      %Order{qty: 10, price: 99, side: :ask, type: :limit, instrument: "BTCP", state: :pending_active}}}
+      %Order{qty: 10, price: 99, side: :ask, type: :limit, instrument: "BTCP", state: :pending_active} = order7}}
     refute_receive _
 
 
-    # Cancel Successful
+    # Cancel bid@99 Successful
     msg = {:state_update, %{order: order1, state: :cancelled, code: :ok}}
+    GenServer.cast(pid, msg)
+    refute_receive _
+
+    # Cancel ask@102 Successful and Order ask@99 active
+    msg = {:state_update, %{order: order6, state: :cancelled, code: :ok}}
+    GenServer.cast(pid, msg)
+    order7 = %Order{order7 | order_id: 7, active_qty: 10}
+    msg    = {:state_update, %{order: order7, state: :active, code: :ok}}
     GenServer.cast(pid, msg)
     refute_receive _
 
 
 
     # This test is based on old design, not used for now
-    '''
     # Market moves
     # Cancel bid@97 because price is out of orderbook
     # Cancel ask@100 because market moved up, cancel asap
@@ -445,9 +452,6 @@ defmodule AlgoTest do
       instrument: "BTCP"
     })
     assert_receive {:"$gen_cast", {:cancel, %Order{price: 97,  side: :bid, state: :pending_cancel}}}
-    assert_receive {:"$gen_cast", {:cancel, %Order{price: 100, side: :ask, state: :pending_cancel}}}
-    assert_receive {:"$gen_cast", {:place,
-      %Order{qty: 10, price: 103, side: :ask, type: :limit, instrument: "BTCP", state: :pending_active} = order9}}
     refute_receive _
 
 
@@ -457,14 +461,25 @@ defmodule AlgoTest do
       fv: 101,
       instrument: "BTCP"
     })
+    assert_receive {:"$gen_cast", {:cancel, %Order{order_id: 7, price: 99,  side: :ask}}}
+    assert_receive {:"$gen_cast", {:cancel, %Order{order_id: 4, price: 100, side: :ask}}}
     assert_receive {:"$gen_cast", {:place,
-      %Order{qty: 10, price: 99, side: :bid, type: :limit, instrument: "BTCP", state: :pending_active} = order8}}
+      %Order{qty: 10, price: 99 , side: :bid, type: :limit, instrument: "BTCP", state: :pending_active} = order8}}
     assert_receive {:"$gen_cast", {:place,
-      %Order{qty: 10, price: 100,  side: :bid, type: :limit, instrument: "BTCP", state: :pending_active} = order7}}
+      %Order{qty: 10, price: 100, side: :bid, type: :limit, instrument: "BTCP", state: :pending_active} = order9}}
+    assert_receive {:"$gen_cast", {:place,
+      %Order{qty: 10, price: 102, side: :ask, type: :limit, instrument: "BTCP", state: :pending_active} = order10}}
+    assert_receive {:"$gen_cast", {:place,
+      %Order{qty: 10, price: 103, side: :ask, type: :limit, instrument: "BTCP", state: :pending_active} = order11}}
     refute_receive _
 
     # bid@97 cancel success
     msg    = {:state_update, %{order: order3, state: :cancelled, code: :ok}}
+    GenServer.cast(pid, msg)
+    refute_receive _
+
+    # Receive feedback, ask@99 cancelled.
+    msg    = {:state_update, %{order: order7, state: :cancelled, code: :ok}}
     GenServer.cast(pid, msg)
     refute_receive _
 
@@ -478,31 +493,40 @@ defmodule AlgoTest do
     order4 = %Order{order4 | active_qty: 0}
     msg    = {:fill, %{fill: fill, order: order4}}
     GenServer.cast(pid, msg)
-    assert_receive {:"$gen_cast", {:cancel, %Order{price: 101, side: :ask, state: :pending_cancel}}}
+    assert_receive {:"$gen_cast", {:cancel, %Order{order_id: 5, price: 101, side: :ask}}}
+    assert_receive {:"$gen_cast", {:cancel, %Order{order_id: 2, price:  98, side: :bid}}}
+    assert_receive {:"$gen_cast", {:place,
+      %Order{qty: 10, price: 101, side: :bid, type: :limit, instrument: "BTCP", state: :pending_active} = order12}}
     refute_receive _
 
-    # ask@101 cancel confirmed
+    # bid@98 and ask@101 cancel confirmed
+    msg    = {:state_update, %{order: order2, state: :cancelled, code: :ok}}
+    GenServer.cast(pid, msg)
     msg    = {:state_update, %{order: order5, state: :cancelled, code: :ok}}
     GenServer.cast(pid, msg)
     refute_receive _
 
-    # bid@100 activate confirmed
-    order7 = %Order{order7 | order_id: 7, active_qty: 10}
-    msg    = {:state_update, %{order: order7, state: :active, code: :ok}}
-    GenServer.cast(pid, msg)
-    refute_receive _
-
-    # bid@99 activate confirmed
+    # bid@99, bid@100 activate confirmed
     order8 = %Order{order8 | order_id: 8, active_qty: 10}
     msg    = {:state_update, %{order: order8, state: :active, code: :ok}}
     GenServer.cast(pid, msg)
-    refute_receive _
-
-    # ask@103 activate confirmed
     order9 = %Order{order9 | order_id: 9, active_qty: 10}
     msg    = {:state_update, %{order: order9, state: :active, code: :ok}}
     GenServer.cast(pid, msg)
     refute_receive _
-    '''
+
+    # ask@102, 103 activate confirmed
+    order10 = %Order{order10 | order_id: 10, active_qty: 10}
+    msg    = {:state_update, %{order: order10, state: :active, code: :ok}}
+    GenServer.cast(pid, msg)
+    order11 = %Order{order11 | order_id: 11, active_qty: 10}
+    msg    = {:state_update, %{order: order11, state: :active, code: :ok}}
+    GenServer.cast(pid, msg)
+    refute_receive _
+
+    order12 = %Order{order12 | order_id: 12, active_qty: 10}
+    msg    = {:state_update, %{order: order12, state: :active, code: :ok}}
+    GenServer.cast(pid, msg)
+    refute_receive _
     end
 end
