@@ -12,7 +12,8 @@ defmodule Algo do
             bbo:               nil,
             fv:                nil,
             price_depth:       nil,
-            tick:              nil
+            tick:              nil,
+            fill_info:         nil
 
   @impl true
   def init({gateway_pid, %{} = config}) do
@@ -39,6 +40,7 @@ defmodule Algo do
         %{state | bbo: bbo}
       _ ->
         valuations = Valuations.get(state.fv, bbo, state.inventory, state.qty_limit, state.margin, state.book_depth, state.tick)
+        valuations = Valuations.drop_key(valuations, state.fill_info)
         orders = OrderManagement.cancel(valuations, state.orders,  state.gateway_pid)
         state = %{state | orders: orders}
 
@@ -54,10 +56,10 @@ defmodule Algo do
     {:noreply, state}
   end
 
-  # Handle place and cancel order
+  # Handle place and cancel order if FV is not constant
   @impl true
-  def handle_cast(%Model{fv: fv, instrument: instrument}, state = %{target_instrument: target_instrument})
-    when instrument == target_instrument
+  def handle_cast(%Model{fv: fv, instrument: instrument}, state = %{target_instrument: target_instrument, fv: state_fv})
+    when instrument == target_instrument and fv != state_fv
   do
     IO.puts("FV : #{fv}")
     state = case state.bbo do
@@ -75,7 +77,7 @@ defmodule Algo do
           state.book_printing_qty,
           state.target_instrument
         )
-        %{state | orders: orders, fv: fv}
+        %{state | orders: orders, fv: fv, fill_info: nil}
     end
     {:noreply, state}
   end
@@ -95,6 +97,7 @@ defmodule Algo do
     state = %{state | orders: orders}
 
     valuations = Valuations.get(state.fv, state.bbo, state.inventory, state.qty_limit, state.margin, state.book_depth, state.tick)
+    valuations = Valuations.drop_key(valuations, state.fill_info)
     orders = OrderManagement.cancel(valuations, state.orders,  state.gateway_pid)
     state = %{state | orders: orders}
 
@@ -118,6 +121,7 @@ defmodule Algo do
     state = %{state | orders: orders}
 
     valuations = Valuations.get(state.fv, state.bbo, state.inventory, state.qty_limit, state.margin, state.book_depth, state.tick)
+    valuations = Valuations.drop_key(valuations, state.fill_info)
     orders = OrderManagement.cancel(valuations, state.orders,  state.gateway_pid)
     state = %{state | orders: orders}
 
@@ -146,13 +150,12 @@ defmodule Algo do
       :bid  -> state.inventory + fill.qty
       :ask  -> state.inventory - fill.qty
     end
+    state = %{state | orders: orders, inventory: inventory, fill_info: {fill.price, fill.side}}
 
-    # Only handle self-oscillation problem when fil messages comes in
-    # This makes the valuation function here has extra input  "inv0"
-    # This argument is not inside other callback functions , as it is fill specific
-    inv0 = state.inventory
-    state = %{state | orders: orders, inventory: inventory}
-    valuations = Valuations.get(state.fv, state.bbo, state.inventory, state.qty_limit, state.margin, state.book_depth, state.tick, inv0)
+    # Drop prices in valuations which can cause self-osillation trades
+    valuations = Valuations.get(state.fv, state.bbo, state.inventory, state.qty_limit, state.margin, state.book_depth, state.tick)
+    valuations = Valuations.drop_key(valuations, state.fill_info)
+
     orders = OrderManagement.cancel(valuations, state.orders,  state.gateway_pid)
     state = %{state | orders: orders}
 
