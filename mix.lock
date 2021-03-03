@@ -1,0 +1,6 @@
+%{
+  "erlport": {:hex, :erlport, "0.10.1", "c96ffa51bbcab0298232fcdfe8c3e110f1598011de71ae6b9082b80c9e2e476a", [:rebar3], [], "hexpm", "34931e8cb62a131d1bc8a2bd04d4007c73c03e4f10e22ee4a218e7172227a918"},
+  "export": {:hex, :export, "0.1.1", "6dfd268b0692428f89b9285859a2dc02b6dcd2e8fdfbca34ac6e6a331351df91", [:mix], [{:erlport, "~> 0.9", [hex: :erlport, repo: "hexpm", optional: false]}], "hexpm", "3da7444ff4053f1824352f4bdb13fbd2c28c93c2011786fb686b649fdca1021f"},
+  "iconv": {:hex, :iconv, "1.0.12", "b0a7ec542ee0319848a53410c72380f628a39f7b694c60cbb6e02d9eb4322a3a", [:rebar3], [{:p1_utils, "1.0.21", [hex: :p1_utils, repo: "hexpm", optional: false]}], "hexpm", "44d1185eb7f80da439c4d0664387d847844ff8d212387b45529309015b77e38f"},
+  "p1_utils": {:hex, :p1_utils, "1.0.21", "9d6244bbd4af881e85af71655e8be5720b5b965b1bdd51a35c7871fd4142af9a", [:rebar3], [], "hexpm", "4b9b90e5863f5fed17f06427ba99b2dc37b216e4dd1308891f0903745e2fccbd"},
+}
